@@ -194,8 +194,28 @@ class FSStorage(models.Model):
         return [s.code for s in self.search([])]
 
     @api.model
-    @tools.ormcache("code")
     def get_fs_by_code(self, code):
+        """Return the filesystem associated to the given code.
+
+        :param code: the code of the filesystem
+        """
+        fs = self._get_fs_by_code(code)
+        try:
+            self._check_connection(fs)
+        except Exception as e:
+            _logger.warning(
+                "Error while connecting to the filesystem storage %s: %s",
+                code,
+                e,
+            )
+            # Generate a new fs instance
+            self.env.registry.clear_cache()
+            fs = self._get_fs_by_code(code)
+        return fs
+
+    @api.model
+    @tools.ormcache("code")
+    def _get_fs_by_code(self, code):
         """Return the filesystem associated to the given code.
 
         :param code: the code of the filesystem
@@ -265,12 +285,38 @@ class FSStorage(models.Model):
             doc = inspect.getdoc(cls.__init__)
             rec.options_properties = f"__init__{signature}\n{doc}"
 
+    @api.model
+    def _get_marker_file_name(self):
+        return ".odoo_fs_storage.marker"
+
+    @api.model
+    def _marker_file_check_connection(self, fs):
+        marker_file_name = self._get_marker_file_name()
+        try:
+            fs.info(marker_file_name)
+        except FileNotFoundError:
+            fs.touch(marker_file_name)
+
+    @api.model
+    def _check_connection(self, fs):
+        self._marker_file_check_connection(fs)
+        return True
+
     @property
     def fs(self) -> fsspec.AbstractFileSystem:
         """Get the fsspec filesystem for this backend."""
         self.ensure_one()
         if not self.__fs:
             self.__fs = self._get_filesystem()
+        if not tools.config["test_enable"]:
+            # Check whether we need to invalidate FS cache or not.
+            # Use a marker file to limit the scope of the LS command for performance.
+            try:
+                self._check_connection(self.__fs)
+            except Exception as e:
+                self.__fs.clear_instance_cache()
+                self.__fs = None
+                raise e
         return self.__fs
 
     def _get_filesystem_storage_path(self) -> str:
@@ -432,7 +478,7 @@ class FSStorage(models.Model):
 
     def action_test_config(self) -> None:
         try:
-            self.fs.ls("", detail=False)
+            self.fs
             title = _("Connection Test Succeeded!")
             message = _("Everything seems properly set up!")
             msg_type = "success"
