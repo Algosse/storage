@@ -200,17 +200,19 @@ class FSStorage(models.Model):
         :param code: the code of the filesystem
         """
         fs = self._get_fs_by_code(code)
-        try:
-            self._check_connection(fs)
-        except Exception as e:
-            _logger.warning(
-                "Error while connecting to the filesystem storage %s: %s",
-                code,
-                e,
-            )
-            # Generate a new fs instance
-            self.env.registry.clear_cache()
-            fs = self._get_fs_by_code(code)
+        
+        if not tools.config["test_enable"]:
+            try:
+                self._check_connection(fs)
+            except Exception as e:
+                _logger.warning(
+                    "Error while connecting to the filesystem storage %s: %s",
+                    code,
+                    e,
+                )
+                # Generate a new fs instance
+                self.env.registry.clear_cache()
+                fs = self._get_fs_by_code(code)
         return fs
 
     @api.model
@@ -478,7 +480,9 @@ class FSStorage(models.Model):
 
     def action_test_config(self) -> None:
         try:
-            self.fs
+            # _check_connection will be called two times as it is called by fs property
+            # However, I don't know another way to test the connection without as as single call `self.fs` is a 'pointless statement'
+            self._check_connection(self.fs)
             title = _("Connection Test Succeeded!")
             message = _("Everything seems properly set up!")
             msg_type = "success"
