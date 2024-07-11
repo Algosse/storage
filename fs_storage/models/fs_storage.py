@@ -200,7 +200,7 @@ class FSStorage(models.Model):
         :param code: the code of the filesystem
         """
         fs = self._get_fs_by_code(code)
-        
+
         if not tools.config["test_enable"]:
             try:
                 self._check_connection(fs)
