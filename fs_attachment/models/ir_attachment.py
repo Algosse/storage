@@ -481,7 +481,7 @@ class IrAttachment(models.Model):
         code: str,
     ) -> fsspec.AbstractFileSystem | None:
         """Return the filesystem for the given storage code"""
-        fs = self.env["fs.storage"].get_fs_by_code(code)
+        fs = self.env["fs.storage"].sudo().get_fs_by_code(code)
         if not fs:
             raise SystemError(f"No Filesystem storage for code {code}")
         return fs
